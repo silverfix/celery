@@ -4,6 +4,8 @@
 
 .. image:: http://cloud.github.com/downloads/celery/celery/celery_128.png
 
+|build-status| |coverage-status|
+
 :Version: 3.2.0a1 (Cipater)
 :Web: http://celeryproject.org/
 :Download: http://pypi.python.org/pypi/celery/
@@ -34,7 +36,7 @@ any language.  So far there's RCelery_ for the Ruby programming language, and a
 `PHP client`, but language interoperability can also be achieved
 by using webhooks.
 
-.. _RCelery: http://leapfrogdevelopment.github.com/rcelery/
+.. _RCelery: https://github.com/leapfrogonline/rcelery
 .. _`PHP client`: https://github.com/gjedeer/celery-php
 .. _`using webhooks`:
     http://docs.celeryproject.org/en/latest/userguide/remote-tasks.html
@@ -183,7 +185,7 @@ development easier, and sometimes they add important hooks like closing
 database connections at ``fork``.
 
 .. _`Django`: http://djangoproject.com/
-.. _`Pylons`: http://pylonshq.com/
+.. _`Pylons`: http://www.pylonsproject.org/
 .. _`Flask`: http://flask.pocoo.org/
 .. _`web2py`: http://web2py.com/
 .. _`Bottle`: http://bottlepy.org/
@@ -393,6 +395,26 @@ Wiki
 
 http://wiki.github.com/celery/celery/
 
+
+.. _maintainers:
+
+Maintainers
+===========
+
+- `@ask`_ (primary maintainer)
+- `@thedrow`_
+- `@chrisgogreen`_
+- `@PMickael`_
+- `@malinoff`_
+- And you? We really need more: https://github.com/celery/celery/issues/2534 
+
+.. _`@ask`: http://github.com/ask
+.. _`@thedrow`: http://github.com/thedrow
+.. _`@chrisgogreen`: http://github.com/chrisgogreen
+.. _`@PMickael`: http://github.com/PMickael
+.. _`@malinoff`: http://github.com/malinoff
+
+
 .. _contributing-short:
 
 Contributing
@@ -425,3 +447,7 @@ file in the top distribution directory for the full license text.
     :alt: Bitdeli badge
     :target: https://bitdeli.com/free
 
+.. |build-status| image:: https://travis-ci.org/celery/celery.svg?branch=master
+   :target: https://travis-ci.org/celery/celery
+.. |coverage-status| image:: https://coveralls.io/repos/celery/celery/badge.svg
+   :target: https://coveralls.io/r/celery/celery

@@ -1,9 +1,13 @@
 from __future__ import absolute_import
 
-import io
 import os
 import sys
 import warnings
+
+if sys.version_info[0] < 3 and not hasattr(sys, 'pypy_version_info'):
+    from StringIO import StringIO
+else:
+    from io import StringIO
 
 from kombu.utils import cached_property, symbol_by_name
 
@@ -11,6 +15,7 @@ from datetime import datetime
 from importlib import import_module
 
 from celery import signals
+from celery.app import default_app
 from celery.exceptions import FixupWarning
 
 __all__ = ['DjangoFixup', 'fixup']
@@ -44,7 +49,8 @@ class DjangoFixup(object):
 
     def __init__(self, app):
         self.app = app
-        self.app.set_default()
+        if default_app is None:
+            self.app.set_default()
         self._worker_fixup = None
 
     def install(self):
@@ -152,13 +158,20 @@ class DjangoWorkerFixup(object):
             pass
         else:
             django_setup()
-        s = io.StringIO()
+        s = StringIO()
         try:
             from django.core.management.validation import get_validation_errors
         except ImportError:
             from django.core.management.base import BaseCommand
             cmd = BaseCommand()
-            cmd.stdout, cmd.stderr = sys.stdout, sys.stderr
+            try:
+                # since django 1.5
+                from django.core.management.base import OutputWrapper
+                cmd.stdout = OutputWrapper(sys.stdout)
+                cmd.stderr = OutputWrapper(sys.stderr)
+            except ImportError:
+                cmd.stdout, cmd.stderr = sys.stdout, sys.stderr
+
             cmd.check()
         else:
             num_errors = get_validation_errors(s, None)
@@ -227,7 +240,7 @@ class DjangoWorkerFixup(object):
 
     def _close_database(self):
         try:
-            funs = [conn.close for conn in self._db.connections]
+            funs = [conn.close for conn in self._db.connections.all()]
         except AttributeError:
             if hasattr(self._db, 'close_old_connections'):  # django 1.6
                 funs = [self._db.close_old_connections]

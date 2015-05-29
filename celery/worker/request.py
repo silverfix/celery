@@ -68,7 +68,7 @@ class Request(object):
     acknowledged = False
     time_start = None
     worker_pid = None
-    timeouts = (None, None)
+    time_limits = (None, None)
     _already_revoked = False
     _terminate_on_ack = None
     _apply_result = None
@@ -76,7 +76,7 @@ class Request(object):
 
     if not IS_PYPY:  # pragma: no cover
         __slots__ = (
-            'app', 'name', 'id', 'on_ack', 'body',
+            'app', 'type', 'name', 'id', 'on_ack', 'body',
             'hostname', 'eventer', 'connection_errors', 'task', 'eta',
             'expires', 'request_dict', 'on_reject', 'utc',
             'content_type', 'content_encoding',
@@ -103,18 +103,20 @@ class Request(object):
         else:
             self.content_type, self.content_encoding = (
                 message.content_type, message.content_encoding,
-                )
+            )
 
-        name = self.name = headers['task']
         self.id = headers['id']
-        if 'timeouts' in headers:
-            self.timeouts = headers['timeouts']
+        type = self.type = self.name = headers['task']
+        if 'shadow' in headers:
+            self.name = headers['shadow']
+        if 'timelimit' in headers:
+            self.time_limits = headers['timelimit']
         self.on_ack = on_ack
         self.on_reject = on_reject
         self.hostname = hostname or socket.gethostname()
         self.eventer = eventer
         self.connection_errors = connection_errors or ()
-        self.task = task or self.app.tasks[name]
+        self.task = task or self.app.tasks[type]
 
         # timezone means the message is timezone-aware, and the only timezone
         # supported at this point is UTC.
@@ -173,19 +175,19 @@ class Request(object):
         if self.revoked():
             raise TaskRevokedError(task_id)
 
-        timeout, soft_timeout = self.timeouts
-        timeout = timeout or task.time_limit
-        soft_timeout = soft_timeout or task.soft_time_limit
+        time_limit, soft_time_limit = self.time_limits
+        time_limit = time_limit or task.time_limit
+        soft_time_limit = soft_time_limit or task.soft_time_limit
         result = pool.apply_async(
             trace_task_ret,
-            args=(self.name, task_id, self.request_dict, self.body,
+            args=(self.type, task_id, self.request_dict, self.body,
                   self.content_type, self.content_encoding),
             accept_callback=self.on_accepted,
             timeout_callback=self.on_timeout,
             callback=self.on_success,
             error_callback=self.on_failure,
-            soft_timeout=soft_timeout or task.soft_time_limit,
-            timeout=timeout or task.time_limit,
+            soft_timeout=soft_time_limit,
+            timeout=time_limit,
             correlation_id=task_id,
         )
         # cannot create weakref to None
@@ -220,7 +222,7 @@ class Request(object):
     def maybe_expire(self):
         """If expired, mark the task as revoked."""
         if self.expires:
-            now = datetime.now(tz_or_local(self.tzlocal) if self.utc else None)
+            now = datetime.now(self.expires.tzinfo)
             if now > self.expires:
                 revoked_tasks.add(self.id)
                 return True
@@ -285,8 +287,8 @@ class Request(object):
         task_ready(self)
         if soft:
             warn('Soft time limit (%ss) exceeded for %s[%s]',
-                 timeout, self.name, self.id)
-            exc = SoftTimeLimitExceeded(timeout)
+                 soft, self.name, self.id)
+            exc = SoftTimeLimitExceeded(soft)
         else:
             error('Hard time limit (%ss) exceeded for %s[%s]',
                   timeout, self.name, self.id)
@@ -310,10 +312,7 @@ class Request(object):
         if self.task.acks_late:
             self.acknowledge()
 
-        if self.eventer and self.eventer.enabled:
-            self.send_event(
-                'task-succeeded', result=retval, runtime=runtime,
-            )
+        self.send_event('task-succeeded', result=retval, runtime=runtime)
 
     def on_retry(self, exc_info):
         """Handler called if the task should be retried."""
@@ -380,6 +379,7 @@ class Request(object):
     def info(self, safe=False):
         return {'id': self.id,
                 'name': self.name,
+                'type': self.type,
                 'body': self.body,
                 'hostname': self.hostname,
                 'time_start': self.time_start,
@@ -388,15 +388,18 @@ class Request(object):
                 'worker_pid': self.worker_pid}
 
     def __str__(self):
-        return '{0.name}[{0.id}]{1}{2}'.format(
-            self,
+        return ' '.join([
+            self.humaninfo(),
             ' eta:[{0}]'.format(self.eta) if self.eta else '',
             ' expires:[{0}]'.format(self.expires) if self.expires else '',
-        )
+        ])
     shortinfo = __str__
 
+    def humaninfo(self):
+        return '{0.name}[{0.id}]'.format(self)
+
     def __repr__(self):
-        return '<{0} {1}: {2}>'.format(type(self).__name__, self.id, self.name)
+        return '<{0}: {1}>'.format(type(self).__name__, self.humaninfo())
 
     @property
     def tzlocal(self):
@@ -455,19 +458,19 @@ def create_request_cls(base, task, pool, hostname, eventer,
             if (self.expires or task_id in revoked_tasks) and self.revoked():
                 raise TaskRevokedError(task_id)
 
-            timeout, soft_timeout = self.timeouts
-            timeout = timeout or default_time_limit
-            soft_timeout = soft_timeout or default_soft_time_limit
+            time_limit, soft_time_limit = self.time_limits
+            time_limit = time_limit or default_time_limit
+            soft_time_limit = soft_time_limit or default_soft_time_limit
             result = apply_async(
                 trace,
-                args=(self.name, task_id, self.request_dict, self.body,
+                args=(self.type, task_id, self.request_dict, self.body,
                       self.content_type, self.content_encoding),
                 accept_callback=self.on_accepted,
                 timeout_callback=self.on_timeout,
                 callback=self.on_success,
                 error_callback=self.on_failure,
-                soft_timeout=soft_timeout,
-                timeout=timeout,
+                soft_timeout=soft_time_limit,
+                timeout=time_limit,
                 correlation_id=task_id,
             )
             # cannot create weakref to None
